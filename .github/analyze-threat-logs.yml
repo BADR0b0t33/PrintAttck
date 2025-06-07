@@ -1,0 +1,46 @@
+name: Analyze Threat Logs (Songbird)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # Runs daily at 2AM UTC
+
+jobs:
+  analyze_logs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout NSFW + Songbird repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas rich markdownify
+
+      - name: Run Log Normalization
+        run: |
+          python blueteam/analysis/normalize_logs.py > normalized_logs.json
+
+      - name: Run Threat Detection
+        run: |
+          python blueteam/analysis/detect_threats.py normalized_logs.json > detections.json
+
+      - name: Map to MITRE ATT&CK TTPs
+        run: |
+          python mitre/sigma-to-attack.py detections.json > attack_mapping.json
+
+      - name: Generate Markdown Report
+        run: |
+          python blueteam/analysis/generate_report.py attack_mapping.json > reports/songbird_analysis.md
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: songbird-threat-report
+          path: reports/songbird_analysis.md
